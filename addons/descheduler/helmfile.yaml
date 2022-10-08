@@ -1,0 +1,7 @@
+releases:
+- name: descheduler
+  namespace: descheduler
+  chart: descheduler/descheduler
+  version: v0.24.0
+  values:
+    - ./values.yaml

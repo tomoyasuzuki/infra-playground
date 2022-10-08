@@ -1,0 +1,257 @@
+---
+# Source: descheduler/templates/podsecuritypolicy.yaml
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: descheduler
+  namespace: descheduler
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'docker/default,runtime/default'
+    seccomp.security.alpha.kubernetes.io/defaultProfileName:  'runtime/default'
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - 'configMap'
+    - 'secret'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1
+        max: 65535
+  seLinux:
+    rule: 'RunAsAny'
+  supplementalGroups:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1
+        max: 65535
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1
+        max: 65535
+  readOnlyRootFilesystem: true
+---
+# Source: descheduler/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: descheduler
+  namespace: descheduler
+  labels:
+    app.kubernetes.io/name: descheduler
+    helm.sh/chart: descheduler-0.24.0
+    app.kubernetes.io/instance: descheduler
+    app.kubernetes.io/version: "0.24.0"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: descheduler/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: descheduler
+  namespace: descheduler
+  labels:
+    app.kubernetes.io/name: descheduler
+    helm.sh/chart: descheduler-0.24.0
+    app.kubernetes.io/instance: descheduler
+    app.kubernetes.io/version: "0.24.0"
+    app.kubernetes.io/managed-by: Helm
+data:
+  policy.yaml: |
+    apiVersion: "descheduler/v1alpha1"
+    kind: "DeschedulerPolicy"
+    strategies:
+      LowNodeUtilization:
+        enabled: true
+        params:
+          nodeResourceUtilizationThresholds:
+            targetThresholds:
+              cpu: 50
+              memory: 50
+              pods: 50
+            thresholds:
+              cpu: 20
+              memory: 20
+              pods: 20
+      RemoveDuplicates:
+        enabled: false
+      RemovePodsViolatingInterPodAntiAffinity:
+        enabled: false
+      RemovePodsViolatingNodeAffinity:
+        enabled: false
+        params:
+          nodeAffinityType:
+          - requiredDuringSchedulingIgnoredDuringExecution
+      RemovePodsViolatingNodeTaints:
+        enabled: false
+      RemovePodsViolatingTopologySpreadConstraint:
+        enabled: true
+        params:
+          includeSoftConstraints: true
+          labelSelector:
+            matchLabels:
+              app: sample-api
+---
+# Source: descheduler/templates/clusterrole.yaml
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: descheduler
+  labels:
+    app.kubernetes.io/name: descheduler
+    helm.sh/chart: descheduler-0.24.0
+    app.kubernetes.io/instance: descheduler
+    app.kubernetes.io/version: "0.24.0"
+    app.kubernetes.io/managed-by: Helm
+rules:
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "update"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list", "delete"]
+- apiGroups: [""]
+  resources: ["pods/eviction"]
+  verbs: ["create"]
+- apiGroups: ["scheduling.k8s.io"]
+  resources: ["priorityclasses"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: ['policy']
+  resources: ['podsecuritypolicies']
+  verbs:     ['use']
+  resourceNames:
+  - descheduler
+---
+# Source: descheduler/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: descheduler
+  labels:
+    app.kubernetes.io/name: descheduler
+    helm.sh/chart: descheduler-0.24.0
+    app.kubernetes.io/instance: descheduler
+    app.kubernetes.io/version: "0.24.0"
+    app.kubernetes.io/managed-by: Helm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: descheduler
+subjects:
+  - kind: ServiceAccount
+    name: descheduler
+    namespace: descheduler
+---
+# Source: descheduler/templates/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: descheduler
+  namespace: descheduler
+  labels:
+    app.kubernetes.io/name: descheduler
+    helm.sh/chart: descheduler-0.24.0
+    app.kubernetes.io/instance: descheduler
+    app.kubernetes.io/version: "0.24.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  schedule: "*/2 * * * *"
+  concurrencyPolicy: "Forbid"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          name: descheduler
+          annotations:
+            checksum/config: 1fc64f1ae1d4377d5996640b374330e1e2656f26ef7fc129bbe92117b19b4f57
+          labels:
+            app.kubernetes.io/name: descheduler
+            app.kubernetes.io/instance: descheduler
+        spec:
+          priorityClassName: system-cluster-critical
+          serviceAccountName: descheduler
+          restartPolicy: "Never"
+          containers:
+            - name: descheduler
+              image: "k8s.gcr.io/descheduler/descheduler:v0.24.0"
+              imagePullPolicy: IfNotPresent
+              command:
+                - "/bin/descheduler"
+              args:
+                - "--policy-config-file"
+                - "/policy-dir/policy.yaml"
+                - "--v"
+                - "3"
+              livenessProbe:
+                failureThreshold: 3
+                httpGet:
+                  path: /healthz
+                  port: 10258
+                  scheme: HTTPS
+                initialDelaySeconds: 3
+                periodSeconds: 10
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                privileged: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+              volumeMounts:
+                - mountPath: /policy-dir
+                  name: policy-volume
+          volumes:
+          - name: policy-volume
+            configMap:
+              name: descheduler
+---
+# Source: descheduler/templates/tests/test-descheduler-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+    name: descheduler-test-pod
+    namespace: descheduler
+    annotations:
+      "helm.sh/hook": test
+spec:
+    restartPolicy: Never
+    serviceAccountName: descheduler-ci
+    containers:
+      - name: descheduler-test-container
+        image: alpine:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - All
+            privileged: false
+            runAsNonRoot: false 
+        command: ["/bin/ash"]
+        args:
+          - -c
+          - >-
+            apk --no-cache add curl &&
+            curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl &&
+            chmod +x ./kubectl &&
+            mv ./kubectl /usr/local/bin/kubectl &&
+            /usr/local/bin/kubectl get pods --namespace descheduler --token "$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" | grep "descheduler" | grep "Completed"
+

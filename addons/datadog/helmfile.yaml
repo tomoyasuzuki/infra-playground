@@ -1,0 +1,7 @@
+releases:
+- name: datadog-agent
+  namespace: datadog
+  chart: datadog/datadog
+  version: v2.37.0
+  values:
+    - ./values.yaml
