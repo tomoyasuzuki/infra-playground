@@ -19,12 +19,22 @@ ArgoCD では Application という Custom Resource (以下、CR)を用いてデ
 
 ここで問題なのは「新しく作成するアプリケーションの Application リソースは手動でクラスタにデプロイする必要がある」ということです。アプリケーションを追加する度にコマンドラインで `kubectl apply -f <hoge-application>.yaml` を叩くのは GitOps 的にあまり良くないと思います。というのも、GitOps においては Git で管理されているマニフェストが唯一の信頼できる情報源であり、クラスタにデプロイされているリソースとGitで管理されているマニフェストは可能な限り一致していることが望ましいからです。`application.yaml`自体をGitで管理すること自体はもちろん可能ですが、担当者が `kubectl apply -f application.yaml` を打ち忘れたり、打ち込んだとしてもタイポしたりすると、Gitで管理されているマニフェストとクラスタ内のリソースに差異が発生してしまいます。
 
-少し長くなりましたが、理想とする体験としては「`application.yaml`を書いてGithubのmainブランチにマージしたら、クラスタに`deployment.yaml`で定義した Deployment リソースがデプロイされた」です。これを実現するためには「Application リソースを管理する Application リソースを作成する」ことが必要であり、ArgoCD ではこれを App of Apps Pattern と呼んでいます。具体的には、`apps`のようなディレクトリを作成し、そこで Application マニフェストを管理します。新しいアプリケーションをデプロイするためには、以下の2つの作業を行います。
+少し長くなりましたが、理想とする体験としては「`application.yaml`を書いてGithubのmainブランチにマージしたら、クラスタに`deployment.yaml`で定義した Deployment リソースがデプロイされた」です。これを実現するためには「Application リソースを管理する Application リソースを作成する」ことが必要であり、ArgoCD ではこれを App of Apps Pattern と呼んでいます。具体的には、`apps`のようなディレクトリを作成し、そこで Application マニフェストを管理します。
+
+```
+apps/
+┣ application-a.yaml
+┣ application-b.yaml
+┣ application-c.yaml <-- Add new application manifest
+```
+
+新しいアプリケーションをデプロイするためには、以下の2つの作業を行います。
 
 - 新しいアプリケーションの Deployment マニフェスト(`deployment.yaml`)を書く + GitHub に置く
 - Application マニフェスト(`application.yaml`)を書く + GitHub の `apps` ディレクトリに置く
 
-これにより、手動でコマンドを叩く必要がなくなり、GitHub で管理されているマニフェストとクラスタ内リソースの乖離が発生するリスクを小さくすることが出来ました。また、直接的なインパクトは小さいものの、オペレーションコストを減らすこともできています。
+これにより、手動でコマンドを叩く必要がなくなり、GitHub で管理されているマニフェストとクラスタ内リソースの乖離が発生するリスクを小さくすることが出来ました。また、直接的なインパクトは小さいものの、オペレーションコストを減らすこともできています。`apps` ディレクトリは以下のようになります。
+
 
 ### Comparison of ArgoCD with other CD tools
 
