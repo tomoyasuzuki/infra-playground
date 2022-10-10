@@ -1,6 +1,10 @@
 ## Practical use of ArgoCD
 
-ArgoCDはHelm Chartが公開されていることもあり、使うだけなら非常に簡単です。しかし、プロダクション環境で使うためには事前に様々な要素を考慮する必要があります。ここでは、以下の3点に注目してArgoCDを実用的に使うためにはどうすればいいのかを検討したいと思います。
+### Disclamer
+このドキュメントでは ArgoCD に関する様々な調査や検討を行います。確かなエビデンスに基づいているものは断定的に書くこともありますが、多くの場合は個人の見解や考えたことであり、むしろこれから議論していきたいトピックを特に扱う予定です。現時点で分からないことを明確にすることもこのドキュメントの1つの役割です。そのため、このドキュメントに書かれている内容を参考にした結果発生したいかなる問題についても、筆者は責任を負いません。
+
+### Perspective
+ArgoCDはHelm Chartが公開されていることもあり、使うだけなら非常に簡単です。しかし、プロダクション環境で使うためには事前に様々な要素を考慮する必要があります。ここでは、以下の4点に注目してArgoCDを実用的に使うためにはどうすればいいのかを検討したいと思います。
 
 - ArgoCDのベストプラクティスは？
 - ArgoCDと他のCDツールの比較
@@ -10,8 +14,36 @@ ArgoCDはHelm Chartが公開されていることもあり、使うだけなら�
 ### Best practices of ArgoCD
 まず、ArgoCD のベストプラクティスを確認していきたいと思います。
 
+#### Manage Argo CD Using Argo CD
+ArgoCD は Kubernetes クラスタ上で動作しているため、やろうと思えば ArgoCD 自体を ArgoCD で管理することも可能です。もちろん ArgoCD を初めてクラスタにデプロイする時はコマンドを叩いて手動でデプロイする必要があります。具体的には、ArgoCD においてデプロイ対象となるアプリケーションを管理するための Application という Custom Resource を用いて、 ArgoCD のマニフェストの変更を監視させることで実現できます。実際のディレクトリ構成の一例として、以下のようなものが挙げられます（公式では kustomize を用いた例があるため、それをそのまま引用しています）。
+
+```
+argocd/
+┣ manifests/
+   ┣ base/
+      ┣ argo-cd-certificate.yaml
+      ...
+   ┣ overlays/
+      ┣ production/
+        ┣ argo-cd-cm.yaml
+        ┣ argocd-notifications-cm.yaml
+       ... 
+   ┣ kustomization.yaml
+┣ argocd-self-application.yaml
+```
+
+使い始めだとイマイチ有難みが分からないかもしれませんが、例えば「新しいマイクロサービスを ArgoCD でデプロイできるようにしたい」という場合に役に立ちます。マイクロサービスアーキテクチャを採用している場合、マイクロサービスごとにリポジトリを分けていることが多いと思います。ArgoCD を ArgoCD で管理していない状態では、監視対象のリポジトリを追加するためには、以下の3つの方法があります。 
+
+- `argo-cd-cm.yaml` を変更して `kubectl apply -f argo-cd-cm.yaml` を実行する
+- ArgoCD のUIから直接リポジトリを登録する
+- `argocd repo add` や `argocd app create --repo` を実行する
+
+パッと見で分かる通り、UIを使うかコマンドラインを使うかどうかです。辛うじて最初の方法ではマニフェストで ArgoCD を管理していますが、`argo-cd-cm.yaml` が ArgoCD で管理されていない以上、GitOps のやり方からは外れています。ここで理想とする体験は「`argo-cd-cm.yaml`を変更してGitHubのmainブランチにマージしたら ArgoCD に新しいリポジトリが登録された」です。これを実現するためには ArgoCD 自体を1つの Application リソースとして管理する必要があります。具体的には、以下のような `argocd-application.yaml` を書いてクラスタにデプロイします。
+
+
+
 #### App of Apps Pattern 
-ArgoCD では Application という Custom Resource (以下、CR)を用いてデプロイ対象のアプリケーションを宣言的に管理することができます。Application は ArgoCD に監視対象のアプリケーションのパスやデプロイ先の namespace などを認識させるためのリソースです。つまり、ArgoCD を使う環境で新たなアプリケーションを追加するためには以下の2つの作業が必要になります。以下では、簡単のためにアプリケーションは Deployment リソースとして定義されていることとします。
+既に述べたように、ArgoCD では Application というリソースを用いてデプロイ対象のアプリケーションを宣言的に管理することができます。Application は ArgoCD に監視対象のアプリケーションのパスやデプロイ先の namespace などを認識させるためのリソースです。つまり、ArgoCD を使う環境で新たなアプリケーションを追加するためには以下の2つの作業が必要になります。以下では、簡単のためにアプリケーションは Deployment リソースとして定義されていると仮定します。
 
 - 新しいアプリケーションの Deployment マニフェスト(`deployment.yaml`)を書く + GitHub に置く
 - Application マニフェスト(`application.yaml`)を書く + GitHub に置く
@@ -23,9 +55,9 @@ ArgoCD では Application という Custom Resource (以下、CR)を用いてデ
 
 ```
 apps/
-┣ application-a.yaml
-┣ application-b.yaml
-┣ application-c.yaml <-- Add new application manifest
+　┣ application-a.yaml
+　┣ application-b.yaml
+　┣ application-c.yaml <-- Add new application manifest
 ```
 
 新しいアプリケーションをデプロイするためには、以下の2つの作業を行います。
