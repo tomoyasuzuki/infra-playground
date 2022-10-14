@@ -38,8 +38,7 @@ argocd/
 - ArgoCD のUIから直接リポジトリを登録する
 - `argocd repo add` や `argocd app create --repo` を実行する
 
-パッと見で分かる通り、UIを使うかコマンドラインを使うかどうかです。辛うじて最初の方法ではマニフェストで ArgoCD を管理していますが、`argo-cd-cm.yaml` が ArgoCD で管理されていない以上、GitOps のやり方からは外れています。ここで理想とする体験は「`argo-cd-cm.yaml`を変更してGitHubのmainブランチにマージしたら ArgoCD に新しいリポジトリが登録された」です。これを実現するためには ArgoCD 自体を1つの Application リソースとして管理する必要があります。具体的には、以下のような `argocd-application.yaml` を書いてクラスタにデプロイします。
-
+パッと見で分かる通り、UIを使うかコマンドラインを使うかどうかです。辛うじて最初の方法ではマニフェストで ArgoCD を管理していますが、`argo-cd-cm.yaml` が ArgoCD で管理されていない以上、GitOps のやり方からは外れています。ここで理想とする体験は「`argo-cd-cm.yaml`を変更してGitHubのmainブランチにマージしたら ArgoCD に新しいリポジトリが登録された」です。これを実現するためには ArgoCD 自体を1つの Application リソースとして管理する必要があります。
 
 
 #### App of Apps Pattern 
